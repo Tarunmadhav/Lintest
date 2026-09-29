@@ -1,0 +1,41 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# --- Virtual environments ---
+.venv/
+venv/
+env/
+
+# --- Test / tooling caches ---
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# --- LinTest runtime state (cooldown bookkeeping) ---
+*.state.json
+/var/reports/
+
+# --- Reports written during local testing ---
+status_report.html
+lintest-report.json
+lintest-report.html
+
+# --- Secrets / local env ---
+.env
+*.env
+!.env.example
+
+# --- Editors / OS ---
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db

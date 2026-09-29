@@ -1,0 +1,7 @@
+# LinTest cron alternative -- install with:
+#   crontab -u lintest cron/lintest.cron
+# or merge the line below into any crontab.
+#
+# Every 5 minutes, log output to the rotating log handled by LinTest itself;
+# cron mail is suppressed because stdout is redirected.
+*/5 * * * * /opt/lintest/.venv/bin/lintest --config /opt/lintest/config.yaml >> /var/log/lintest/cron.log 2>&1

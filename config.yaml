@@ -1,0 +1,101 @@
+# ============================================================================
+#  LinTest configuration
+# ----------------------------------------------------------------------------
+#  Every value below is validated on startup; errors are reported as a single
+#  numbered list.  This file contains NO secrets: the Telegram bot token and
+#  chat id are read from environment variables (see alerts.telegram below
+#  for the variable names, and .env.example for a template).
+# ============================================================================
+
+general:
+  # Default timeout applied to any check that spawns a process or opens a
+  # socket and does not define its own timeout.
+  check_timeout_seconds: 5
+
+schedule:
+  # "timer": perform exactly one check pass per invocation (what systemd
+  #          timer / cron call).  This is the default.
+  # "daemon": loop forever, sleeping interval_seconds between passes
+  #           (run under systemd service without a timer, or in tmux).
+  mode: timer
+  interval_seconds: 300
+
+thresholds:
+  # Alert severities are derived automatically:
+  #   value >= threshold           -> CRITICAL
+  #   value >= threshold - 10      -> WARNING   (a 10% early-warning band)
+  cpu_percent: 85.0
+  ram_percent: 90.0
+  # Default disk threshold applied to every monitored mount point ...
+  disk_percent: 90.0
+  # ... with optional per-mount overrides.
+  disk_overrides:
+    "/": 85.0
+  # 1-minute load average normalised by CPU core count.
+  load1_per_core: 1.5
+  # Failed SSH logins inside security.window_minutes.
+  failed_ssh_logins: 20
+
+system:
+  enabled: true
+  # Mount points starting with any of these prefixes are skipped.
+  ignore_mount_prefixes: ["/snap", "/boot/efi", "/run/user", "/proc", "/sys", "/dev"]
+  # Pseudo filesystem types that never carry real data.
+  exclude_filesystems: ["tmpfs", "devtmpfs", "squashfs", "overlay", "iso9660", "vfat"]
+
+services:
+  enabled: true
+  # systemctl is-active must return "active" for each name below.
+  # A failed CRITICAL service exits 1; a failed WARNING service does not.
+  critical: [sshd]
+  warning: [nginx, docker]
+
+network:
+  enabled: true
+  # ICMP ping checks (needs ping binary or rootless setcap; falls back to a
+  # TCP-connect latency probe for the same host if ping is unavailable).
+  ping_hosts: [1.1.1.1, 8.8.8.8]
+  ping_count: 3
+  ping_timeout_seconds: 2
+  # TCP connect checks.  IPv6 targets use the "[::1]:443" form.
+  tcp_ports: ["1.1.1.1:443"]
+  tcp_timeout_seconds: 3
+  # DNS resolution sanity check.
+  dns_host: google.com
+  # Empty list -> use the system resolver.
+  dns_servers: []
+
+security:
+  enabled: true
+  # Failed-SSH-login source.  If this file is missing, LinTest falls back to
+  # "journalctl -u ssh -u sshd" when use_journalctl_fallback is true.
+  auth_log_path: /var/log/auth.log
+  use_journalctl_fallback: true
+  # Count failed logins in the last N minutes.
+  window_minutes: 15
+  # How many top offending IPs to include in alerts/reports.
+  top_ips: 5
+
+alerts:
+  # Once an alert fires, the same key (check + subject) is not re-sent for
+  # this many minutes.  A "recovered" message is sent when it clears.
+  cooldown_minutes: 30
+  send_recovery: true
+  console:
+    enabled: true
+  telegram:
+    enabled: true
+    # Names of the environment variables holding the secret values.
+    # Never put the token itself in this file.
+    token_env: LINTEST_TELEGRAM_TOKEN
+    chat_id_env: LINTEST_TELEGRAM_CHAT_ID
+    parse_mode: HTML          # HTML | Markdown | MarkdownV2 ("" for plain)
+    timeout_seconds: 10
+
+logging:
+  level: INFO                 # DEBUG | INFO | WARNING | ERROR | CRITICAL
+  # Empty string disables the file log (console still receives everything).
+  # install.sh creates /var/log/lintest for the lintest user.
+  file: /var/log/lintest/lintest.log
+  max_bytes: 1048576
+  backup_count: 5

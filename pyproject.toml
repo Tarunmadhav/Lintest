@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lintest"
+version = "1.0.0"
+description = "Linux server health monitor with threshold checks and Telegram alerting"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Tarun Madhav" }]
+keywords = ["linux", "monitoring", "health-check", "systemd", "telegram", "devops"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: System Administrators",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Monitoring",
+    "Topic :: System :: Systems Administration",
+]
+dependencies = [
+    "psutil>=5.9,<8",
+    "PyYAML>=6.0,<7",
+    "requests>=2.31,<3",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0,<9", "pytest-cov>=5.0,<6"]
+
+[project.scripts]
+lintest = "lintest.main:main"
+
+[tool.setuptools.packages.find]
+include = ["lintest*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

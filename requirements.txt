@@ -1,0 +1,6 @@
+# LinTest runtime dependencies.
+# psutil covers CPU / RAM / disk / load; PyYAML covers the config file;
+# requests covers the Telegram Bot API.  Everything else is stdlib.
+psutil>=5.9,<8
+PyYAML>=6.0,<7
+requests>=2.31,<3

@@ -1,0 +1,29 @@
+[Unit]
+Description=LinTest health check pass (service part of lintest.timer)
+Documentation=file:///opt/lintest/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=lintest
+Group=lintest
+WorkingDirectory=/opt/lintest
+# Config lives next to the installation; override via the CLI if needed.
+ExecStart=/opt/lintest/.venv/bin/lintest --config /opt/lintest/config.yaml
+# Secrets are injected from the environment file (not stored in this unit).
+EnvironmentFile=/opt/lintest/.env
+# A CRITICAL result exits 1; SuccessExitStatus=1 keeps the unit "green"
+# so systemctl doesn't mark the monitor itself as failed.
+SuccessExitStatus=1
+# Be a good citizen when the box is busy.
+Nice=10
+IOSchedulingClass=idle
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=read-only
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

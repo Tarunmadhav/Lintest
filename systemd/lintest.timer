@@ -1,0 +1,16 @@
+[Unit]
+Description=Run LinTest health check every 5 minutes
+Requires=lintest.service
+
+[Timer]
+# Run 2 minutes after boot, then every 5 minutes.
+OnBootSec=2min
+OnUnitActiveSec=5min
+# If the machine was asleep/down, fire once on wake-up instead of
+# stacking missed runs.
+AccuracySec=15s
+Persistent=true
+Unit=lintest.service
+
+[Install]
+WantedBy=timers.target
