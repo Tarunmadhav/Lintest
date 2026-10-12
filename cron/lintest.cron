@@ -1,7 +1,13 @@
 # LinTest cron alternative -- install with:
 #   crontab -u lintest cron/lintest.cron
-# or merge the line below into any crontab.
+# or merge the 'lintest'-marked line below into any crontab.
 #
-# Every 5 minutes, log output to the rotating log handled by LinTest itself;
-# cron mail is suppressed because stdout is redirected.
-*/5 * * * * /opt/lintest/.venv/bin/lintest --config /opt/lintest/config.yaml >> /var/log/lintest/cron.log 2>&1
+# Notes:
+#   * cron does not read the systemd EnvironmentFile, so the line sources
+#     /opt/lintest/.env itself -- without that the Telegram channel has no
+#     credentials and only the console fallback can deliver alerts.
+#   * stdout/stderr are redirected to the log directory, so cron never sends
+#     mail for a CRITICAL result (exit code 1).
+#   * the trailing '# lintest' marker lets install.sh --uninstall remove only
+#     LinTest's own lines.
+*/5 * * * * set -a; . /opt/lintest/.env; set +a; /opt/lintest/.venv/bin/lintest --config /opt/lintest/config.yaml >> /var/log/lintest/cron.log 2>&1  # lintest

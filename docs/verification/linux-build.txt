@@ -1,0 +1,260 @@
+$ python -m build
+date: 2026-10-12T04:44:26Z (WSL Ubuntu)
+* Creating isolated environment: venv+pip...
+* Installing packages in isolated environment:
+  - setuptools>=68
+* Getting build dependencies for sdist...
+running egg_info
+creating lintest.egg-info
+writing lintest.egg-info/PKG-INFO
+writing dependency_links to lintest.egg-info/dependency_links.txt
+writing entry points to lintest.egg-info/entry_points.txt
+writing requirements to lintest.egg-info/requires.txt
+writing top-level names to lintest.egg-info/top_level.txt
+writing manifest file 'lintest.egg-info/SOURCES.txt'
+reading manifest file 'lintest.egg-info/SOURCES.txt'
+writing manifest file 'lintest.egg-info/SOURCES.txt'
+WARNING `project.license` as a TOML table is deprecated
+!!
+
+        ********************************************************************************
+        Please use a simple string containing a SPDX expression for `project.license`. You can also use `project.license-files`. (Both options available on setuptools>=77.0.0).
+
+        By 2027-Feb-18, you need to update your project and remove deprecated calls
+        or your builds will no longer be supported.
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+* Installed build dependency versions:
+  - setuptools==84.0.0
+* Building sdist...
+running sdist
+running egg_info
+writing lintest.egg-info/PKG-INFO
+writing dependency_links to lintest.egg-info/dependency_links.txt
+writing entry points to lintest.egg-info/entry_points.txt
+writing requirements to lintest.egg-info/requires.txt
+writing top-level names to lintest.egg-info/top_level.txt
+reading manifest file 'lintest.egg-info/SOURCES.txt'
+writing manifest file 'lintest.egg-info/SOURCES.txt'
+running check
+creating lintest-1.0.0
+creating lintest-1.0.0/lintest
+creating lintest-1.0.0/lintest.egg-info
+creating lintest-1.0.0/lintest/alerts
+creating lintest-1.0.0/lintest/checks
+creating lintest-1.0.0/lintest/reporting
+creating lintest-1.0.0/lintest/utils
+creating lintest-1.0.0/tests
+copying files to lintest-1.0.0...
+copying README.md -> lintest-1.0.0
+copying pyproject.toml -> lintest-1.0.0
+copying lintest/__init__.py -> lintest-1.0.0/lintest
+copying lintest/__main__.py -> lintest-1.0.0/lintest
+copying lintest/config.py -> lintest-1.0.0/lintest
+copying lintest/main.py -> lintest-1.0.0/lintest
+copying lintest/models.py -> lintest-1.0.0/lintest
+copying lintest.egg-info/PKG-INFO -> lintest-1.0.0/lintest.egg-info
+copying lintest.egg-info/SOURCES.txt -> lintest-1.0.0/lintest.egg-info
+copying lintest.egg-info/dependency_links.txt -> lintest-1.0.0/lintest.egg-info
+copying lintest.egg-info/entry_points.txt -> lintest-1.0.0/lintest.egg-info
+copying lintest.egg-info/requires.txt -> lintest-1.0.0/lintest.egg-info
+copying lintest.egg-info/top_level.txt -> lintest-1.0.0/lintest.egg-info
+copying lintest/alerts/__init__.py -> lintest-1.0.0/lintest/alerts
+copying lintest/alerts/base.py -> lintest-1.0.0/lintest/alerts
+copying lintest/alerts/console.py -> lintest-1.0.0/lintest/alerts
+copying lintest/alerts/manager.py -> lintest-1.0.0/lintest/alerts
+copying lintest/alerts/telegram.py -> lintest-1.0.0/lintest/alerts
+copying lintest/checks/__init__.py -> lintest-1.0.0/lintest/checks
+copying lintest/checks/base.py -> lintest-1.0.0/lintest/checks
+copying lintest/checks/network.py -> lintest-1.0.0/lintest/checks
+copying lintest/checks/security.py -> lintest-1.0.0/lintest/checks
+copying lintest/checks/services.py -> lintest-1.0.0/lintest/checks
+copying lintest/checks/system.py -> lintest-1.0.0/lintest/checks
+copying lintest/reporting/__init__.py -> lintest-1.0.0/lintest/reporting
+copying lintest/reporting/html_report.py -> lintest-1.0.0/lintest/reporting
+copying lintest/reporting/json_output.py -> lintest-1.0.0/lintest/reporting
+copying lintest/utils/__init__.py -> lintest-1.0.0/lintest/utils
+copying lintest/utils/logging_setup.py -> lintest-1.0.0/lintest/utils
+copying lintest/utils/shell.py -> lintest-1.0.0/lintest/utils
+copying tests/test_alert_delivery.py -> lintest-1.0.0/tests
+copying tests/test_alerts.py -> lintest-1.0.0/tests
+copying tests/test_automation_files.py -> lintest-1.0.0/tests
+copying tests/test_cli.py -> lintest-1.0.0/tests
+copying tests/test_config.py -> lintest-1.0.0/tests
+copying tests/test_config_malformed.py -> lintest-1.0.0/tests
+copying tests/test_error_isolation.py -> lintest-1.0.0/tests
+copying tests/test_network_checks.py -> lintest-1.0.0/tests
+copying tests/test_reporting.py -> lintest-1.0.0/tests
+copying tests/test_security_parser.py -> lintest-1.0.0/tests
+copying tests/test_security_sources.py -> lintest-1.0.0/tests
+copying tests/test_services_checks.py -> lintest-1.0.0/tests
+copying tests/test_shell_utils.py -> lintest-1.0.0/tests
+copying tests/test_state_file.py -> lintest-1.0.0/tests
+copying tests/test_system_checks.py -> lintest-1.0.0/tests
+copying tests/test_telegram_channel.py -> lintest-1.0.0/tests
+copying tests/test_thresholds.py -> lintest-1.0.0/tests
+Writing lintest-1.0.0/setup.cfg
+Creating tar archive
+removing 'lintest-1.0.0' (and everything under it)
+WARNING `project.license` as a TOML table is deprecated
+!!
+
+        ********************************************************************************
+        Please use a simple string containing a SPDX expression for `project.license`. You can also use `project.license-files`. (Both options available on setuptools>=77.0.0).
+
+        By 2027-Feb-18, you need to update your project and remove deprecated calls
+        or your builds will no longer be supported.
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+* Building wheel from sdist
+* Creating isolated environment: venv+pip...
+* Installing packages in isolated environment:
+  - setuptools>=68
+* Getting build dependencies for wheel...
+running egg_info
+writing lintest.egg-info/PKG-INFO
+writing dependency_links to lintest.egg-info/dependency_links.txt
+writing entry points to lintest.egg-info/entry_points.txt
+writing requirements to lintest.egg-info/requires.txt
+writing top-level names to lintest.egg-info/top_level.txt
+reading manifest file 'lintest.egg-info/SOURCES.txt'
+writing manifest file 'lintest.egg-info/SOURCES.txt'
+WARNING `project.license` as a TOML table is deprecated
+!!
+
+        ********************************************************************************
+        Please use a simple string containing a SPDX expression for `project.license`. You can also use `project.license-files`. (Both options available on setuptools>=77.0.0).
+
+        By 2027-Feb-18, you need to update your project and remove deprecated calls
+        or your builds will no longer be supported.
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+* Installed build dependency versions:
+  - setuptools==84.0.0
+* Building wheel...
+running bdist_wheel
+running build
+running build_py
+creating build/lib/lintest
+copying lintest/models.py -> build/lib/lintest
+copying lintest/main.py -> build/lib/lintest
+copying lintest/config.py -> build/lib/lintest
+copying lintest/__main__.py -> build/lib/lintest
+copying lintest/__init__.py -> build/lib/lintest
+creating build/lib/lintest/utils
+copying lintest/utils/shell.py -> build/lib/lintest/utils
+copying lintest/utils/logging_setup.py -> build/lib/lintest/utils
+copying lintest/utils/__init__.py -> build/lib/lintest/utils
+creating build/lib/lintest/reporting
+copying lintest/reporting/json_output.py -> build/lib/lintest/reporting
+copying lintest/reporting/html_report.py -> build/lib/lintest/reporting
+copying lintest/reporting/__init__.py -> build/lib/lintest/reporting
+creating build/lib/lintest/checks
+copying lintest/checks/system.py -> build/lib/lintest/checks
+copying lintest/checks/services.py -> build/lib/lintest/checks
+copying lintest/checks/security.py -> build/lib/lintest/checks
+copying lintest/checks/network.py -> build/lib/lintest/checks
+copying lintest/checks/base.py -> build/lib/lintest/checks
+copying lintest/checks/__init__.py -> build/lib/lintest/checks
+creating build/lib/lintest/alerts
+copying lintest/alerts/telegram.py -> build/lib/lintest/alerts
+copying lintest/alerts/manager.py -> build/lib/lintest/alerts
+copying lintest/alerts/console.py -> build/lib/lintest/alerts
+copying lintest/alerts/base.py -> build/lib/lintest/alerts
+copying lintest/alerts/__init__.py -> build/lib/lintest/alerts
+running egg_info
+writing lintest.egg-info/PKG-INFO
+writing dependency_links to lintest.egg-info/dependency_links.txt
+writing entry points to lintest.egg-info/entry_points.txt
+writing requirements to lintest.egg-info/requires.txt
+writing top-level names to lintest.egg-info/top_level.txt
+reading manifest file 'lintest.egg-info/SOURCES.txt'
+writing manifest file 'lintest.egg-info/SOURCES.txt'
+installing to build/bdist.linux-x86_64/wheel
+running install
+running install_lib
+creating build/bdist.linux-x86_64/wheel
+creating build/bdist.linux-x86_64/wheel/lintest
+creating build/bdist.linux-x86_64/wheel/lintest/alerts
+copying build/lib/lintest/alerts/__init__.py -> build/bdist.linux-x86_64/wheel/./lintest/alerts
+copying build/lib/lintest/alerts/base.py -> build/bdist.linux-x86_64/wheel/./lintest/alerts
+copying build/lib/lintest/alerts/console.py -> build/bdist.linux-x86_64/wheel/./lintest/alerts
+copying build/lib/lintest/alerts/manager.py -> build/bdist.linux-x86_64/wheel/./lintest/alerts
+copying build/lib/lintest/alerts/telegram.py -> build/bdist.linux-x86_64/wheel/./lintest/alerts
+creating build/bdist.linux-x86_64/wheel/lintest/checks
+copying build/lib/lintest/checks/__init__.py -> build/bdist.linux-x86_64/wheel/./lintest/checks
+copying build/lib/lintest/checks/base.py -> build/bdist.linux-x86_64/wheel/./lintest/checks
+copying build/lib/lintest/checks/network.py -> build/bdist.linux-x86_64/wheel/./lintest/checks
+copying build/lib/lintest/checks/security.py -> build/bdist.linux-x86_64/wheel/./lintest/checks
+copying build/lib/lintest/checks/services.py -> build/bdist.linux-x86_64/wheel/./lintest/checks
+copying build/lib/lintest/checks/system.py -> build/bdist.linux-x86_64/wheel/./lintest/checks
+creating build/bdist.linux-x86_64/wheel/lintest/reporting
+copying build/lib/lintest/reporting/__init__.py -> build/bdist.linux-x86_64/wheel/./lintest/reporting
+copying build/lib/lintest/reporting/html_report.py -> build/bdist.linux-x86_64/wheel/./lintest/reporting
+copying build/lib/lintest/reporting/json_output.py -> build/bdist.linux-x86_64/wheel/./lintest/reporting
+creating build/bdist.linux-x86_64/wheel/lintest/utils
+copying build/lib/lintest/utils/__init__.py -> build/bdist.linux-x86_64/wheel/./lintest/utils
+copying build/lib/lintest/utils/logging_setup.py -> build/bdist.linux-x86_64/wheel/./lintest/utils
+copying build/lib/lintest/utils/shell.py -> build/bdist.linux-x86_64/wheel/./lintest/utils
+copying build/lib/lintest/__init__.py -> build/bdist.linux-x86_64/wheel/./lintest
+copying build/lib/lintest/__main__.py -> build/bdist.linux-x86_64/wheel/./lintest
+copying build/lib/lintest/config.py -> build/bdist.linux-x86_64/wheel/./lintest
+copying build/lib/lintest/main.py -> build/bdist.linux-x86_64/wheel/./lintest
+copying build/lib/lintest/models.py -> build/bdist.linux-x86_64/wheel/./lintest
+running install_egg_info
+Copying lintest.egg-info to build/bdist.linux-x86_64/wheel/./lintest-1.0.0-py3.14.egg-info
+running install_scripts
+creating build/bdist.linux-x86_64/wheel/lintest-1.0.0.dist-info/WHEEL
+creating '/var/tmp/lintest-verify/src/dist/.tmp-wm90cokg/lintest-1.0.0-py3-none-any.whl' and adding 'build/bdist.linux-x86_64/wheel' to it
+adding 'lintest/__init__.py'
+adding 'lintest/__main__.py'
+adding 'lintest/config.py'
+adding 'lintest/main.py'
+adding 'lintest/models.py'
+adding 'lintest/alerts/__init__.py'
+adding 'lintest/alerts/base.py'
+adding 'lintest/alerts/console.py'
+adding 'lintest/alerts/manager.py'
+adding 'lintest/alerts/telegram.py'
+adding 'lintest/checks/__init__.py'
+adding 'lintest/checks/base.py'
+adding 'lintest/checks/network.py'
+adding 'lintest/checks/security.py'
+adding 'lintest/checks/services.py'
+adding 'lintest/checks/system.py'
+adding 'lintest/reporting/__init__.py'
+adding 'lintest/reporting/html_report.py'
+adding 'lintest/reporting/json_output.py'
+adding 'lintest/utils/__init__.py'
+adding 'lintest/utils/logging_setup.py'
+adding 'lintest/utils/shell.py'
+adding 'lintest-1.0.0.dist-info/METADATA'
+adding 'lintest-1.0.0.dist-info/WHEEL'
+adding 'lintest-1.0.0.dist-info/entry_points.txt'
+adding 'lintest-1.0.0.dist-info/top_level.txt'
+adding 'lintest-1.0.0.dist-info/RECORD'
+removing build/bdist.linux-x86_64/wheel
+WARNING `project.license` as a TOML table is deprecated
+!!
+
+        ********************************************************************************
+        Please use a simple string containing a SPDX expression for `project.license`. You can also use `project.license-files`. (Both options available on setuptools>=77.0.0).
+
+        By 2027-Feb-18, you need to update your project and remove deprecated calls
+        or your builds will no longer be supported.
+
+        See https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license for details.
+        ********************************************************************************
+
+!!
+Successfully built lintest-1.0.0.tar.gz and lintest-1.0.0-py3-none-any.whl
+exit code: 0

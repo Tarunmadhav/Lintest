@@ -11,19 +11,41 @@ Group=lintest
 WorkingDirectory=/opt/lintest
 # Config lives next to the installation; override via the CLI if needed.
 ExecStart=/opt/lintest/.venv/bin/lintest --config /opt/lintest/config.yaml
+# Explicit state location.  StateDirectory= below guarantees the directory
+# exists and is writable, so cooldown state can never land somewhere read-only
+# (the unit runs with ProtectSystem=strict).  An operator can override this in
+# .env, which is read afterwards.
+Environment=LINTEST_STATE_FILE=/var/lib/lintest/state.json
 # Secrets are injected from the environment file (not stored in this unit).
+# systemd creates and owns these directories for the service user:
+#   /var/lib/lintest  (cooldown/recovery state)  -> $STATE_DIRECTORY
+#   /var/log/lintest  (rotating log file)        -> $LOGS_DIRECTORY
+StateDirectory=lintest
+StateDirectoryMode=0750
+LogsDirectory=lintest
+LogsDirectoryMode=0750
 EnvironmentFile=/opt/lintest/.env
 # A CRITICAL result exits 1; SuccessExitStatus=1 keeps the unit "green"
 # so systemctl doesn't mark the monitor itself as failed.
 SuccessExitStatus=1
+# A pass should take seconds; never let a hung probe block the timer forever.
+TimeoutStartSec=120
 # Be a good citizen when the box is busy.
 Nice=10
 IOSchedulingClass=idle
-# Hardening
+
+# --- Hardening (see SECURITY.md) ---------------------------------------------
+# Everything is read-only for this service except the two directories above:
+# the monitor cannot modify its own code, config or the rest of the system.
 NoNewPrivileges=true
-ProtectSystem=full
+ProtectSystem=strict
 ProtectHome=read-only
 PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+# AF_NETLINK is needed by the libc resolver when it probes interface state.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 
 [Install]
 WantedBy=multi-user.target

@@ -103,16 +103,33 @@ def build_channels(cfg: Config, hostname: str) -> List[AlertChannel]:
     return [c for c in channels if c.enabled]
 
 
+def _safe_print(line: str) -> None:
+    """Print *line* without ever crashing on a console that cannot encode it.
+
+    Windows consoles may use a legacy code page (cp1252 and friends); a
+    mount point, hostname or message containing characters outside it would
+    otherwise raise ``UnicodeEncodeError`` and abort the whole report with a
+    traceback.  The line is retried with replacement characters instead --
+    lossy display beats a crashed monitoring pass.
+    """
+    try:
+        print(line)
+    except UnicodeEncodeError:
+        encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+        safe = line.encode(encoding, errors="replace").decode(encoding)
+        print(safe)
+
+
 def print_text_report(report: CheckReport, dispatch: Optional[DispatchSummary]) -> None:
     """Human-readable report on stdout."""
     started = report.started_at.strftime("%Y-%m-%d %H:%M:%SZ")
-    print(f"LinTest {__version__} | host {report.hostname} | {started}")
-    print("-" * 78)
+    _safe_print(f"LinTest {__version__} | host {report.hostname} | {started}")
+    _safe_print("-" * 78)
     for r in report.results:
         mark = _SEV_MARK.get(r.severity.value, "?")
         subject = f"[{r.subject}]" if r.subject else ""
-        print(f" {mark} {r.severity.value:<8} {r.check:<18} {subject:<22} {r.message}")
-    print("-" * 78)
+        _safe_print(f" {mark} {r.severity.value:<8} {r.check:<18} {subject:<22} {r.message}")
+    _safe_print("-" * 78)
 
     summary = report.to_dict()["summary"]
     counts = (f"{summary['ok']} ok, {summary['warnings']} warning(s), "
@@ -122,7 +139,7 @@ def print_text_report(report: CheckReport, dispatch: Optional[DispatchSummary]) 
         d = dispatch.to_dict()
         counts += (f" | alerts sent: {d['sent']}, suppressed: {d['suppressed']}, "
                    f"recovered: {d['recovered']}")
-    print(f"Result: {report.worst.value} ({counts}) | exit code {report.exit_code}")
+    _safe_print(f"Result: {report.worst.value} ({counts}) | exit code {report.exit_code}")
 
 
 def run_pass(cfg: Config, output: str, report_arg: Optional[str], dispatch: bool) -> int:
@@ -175,10 +192,9 @@ def run_daemon(cfg: Config, args: argparse.Namespace) -> int:
     """Loop forever, sleeping between passes (``schedule.mode: daemon``)."""
     logger.info("daemon mode: check pass every %d second(s)",
                 cfg.schedule.interval_seconds)
-    last_code = 0
     while True:
         try:
-            last_code = run_pass(cfg, args.output, args.report, dispatch=not args.dry_run)
+            run_pass(cfg, args.output, args.report, dispatch=not args.dry_run)
         except Exception:  # noqa: BLE001 -- the loop must survive anything
             logger.exception("check pass failed; retrying next interval")
         time.sleep(cfg.schedule.interval_seconds)

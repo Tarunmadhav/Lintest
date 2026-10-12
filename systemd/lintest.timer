@@ -1,16 +1,21 @@
 [Unit]
 Description=Run LinTest health check every 5 minutes
 Requires=lintest.service
+# NOTE: do not add `After=lintest.service` here.  systemd already orders a
+# triggered unit after its trigger, so an explicit After= both ways creates an
+# unschedulable ordering cycle (lintest.timer gets "Transaction order is cyclic"
+# and never starts).
 
 [Timer]
-# Run 2 minutes after boot, then every 5 minutes.
+# Run 2 minutes after boot, then 5 minutes after each *completed* pass.
+# OnUnitInactiveSec (rather than OnUnitActiveSec) guarantees a pass can never
+# start while the previous one is still running.
 OnBootSec=2min
-OnUnitActiveSec=5min
-# If the machine was asleep/down, fire once on wake-up instead of
-# stacking missed runs.
-AccuracySec=15s
-Persistent=true
+OnUnitInactiveSec=5min
 Unit=lintest.service
+# Allow a small drift window so systemd can batch this wake-up with others.
+AccuracySec=15s
+RandomizedDelaySec=30s
 
 [Install]
 WantedBy=timers.target

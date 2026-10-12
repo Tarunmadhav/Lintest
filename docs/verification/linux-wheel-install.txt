@@ -1,0 +1,25 @@
+$ clean venv: pip install dist/*.whl; lintest --version; real pass
+date: 2026-10-12T04:44:26Z (WSL Ubuntu, python3 default)
+pip install exit code: 0
+lintest 1.0.0
+lintest --version exit code: 0
+2026-10-12 04:44:53 WARNING  lintest.alerts.telegram: Telegram alerts enabled but LINTEST_TELEGRAM_TOKEN / LINTEST_TELEGRAM_CHAT_ID are not set in the environment -- channel disabled
+2026-10-12 04:44:53 INFO     lintest.main: dry run: alert dispatch skipped (3 problem(s) found)
+LinTest 1.0.0 | host TarunGudipati | 2026-10-12 04:44:48Z
+------------------------------------------------------------------------------
+ . OK       system.cpu         [cpu]                  CPU usage 0.2% (12 cores)
+ . OK       system.ram         [ram]                  RAM usage 6.9% (0.5/7.6 GiB)
+ . OK       system.disk        [/]                    disk / 0.2% used (953.7/1006.9 GiB free on ext4)
+ . OK       system.disk        [/mnt/wslg/distro]     disk /mnt/wslg/distro 0.2% used (953.7/1006.9 GiB free on ext4)
+ . OK       system.load        [load]                 load1 0.57 (0.05/core over 12 cores; 5m 0.23, 15m 0.09)
+ X CRITICAL services.active    [sshd]                 service 'sshd' is inactive (tier: critical)
+ ! WARNING  services.active    [nginx]                service 'nginx' is inactive (tier: warning)
+ ! WARNING  services.active    [docker]               service 'docker' is inactive (tier: warning)
+ . OK       network.ping       [1.1.1.1]              host 1.1.1.1 reachable: avg 224 ms, loss 0%
+ . OK       network.ping       [8.8.8.8]              host 8.8.8.8 reachable: avg 218 ms, loss 0%
+ . OK       network.tcp        [1.1.1.1:443]          connected to 1.1.1.1:443 in 224 ms
+ . OK       network.dns        [google.com]           resolved google.com -> 64.233.180.102 (system resolver)
+ . OK       security.ssh       [ssh]                  0 failed SSH logins in the last 15 min (source: /var/log/auth.log)
+------------------------------------------------------------------------------
+Result: CRITICAL (10 ok, 2 warning(s), 1 critical, 0 error(s) in 5.5s) | exit code 1
+real pass (--dry-run --once) exit code: 1 (expected 1: CRITICAL sshd on this host)

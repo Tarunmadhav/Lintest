@@ -12,14 +12,16 @@
 from __future__ import annotations
 
 import logging
+import math
 import re
 import socket
+import sys
 import time
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
-from lintest.config import Config
 from lintest.checks.base import run_check
+from lintest.config import Config
 from lintest.models import CheckResult, critical, error, info, ok, warning
 from lintest.utils.shell import run_command
 
@@ -32,6 +34,10 @@ TCP_FALLBACK_PORT = 443
 
 _RTT_RE = re.compile(r"=([\d.]+)/([\d.]+)/([\d.]+)/([\d.]+)\s*ms")
 _TIME_RE = re.compile(r"time[=<]([\d.]+)\s*ms")
+#: Windows ping summary: ``Average = 12ms`` (min/max/avg line).
+_WIN_AVG_RE = re.compile(r"Average\s*=\s*([\d.]+)\s*ms", re.IGNORECASE)
+#: Packet loss: iputils ``0% packet loss`` and Windows ``(100% loss)``.
+_LOSS_RE = re.compile(r"([\d.]+)%(?:\s*packet)?\s*loss", re.IGNORECASE)
 
 
 @dataclass
@@ -43,6 +49,12 @@ class PingOutcome:
     received: int = 0
     loss_percent: float = 100.0
     avg_ms: Optional[float] = None
+    #: True when the output contained *at least one* recognisable ping field
+    #: (a packet-loss line, an rtt summary or a per-reply ``time=`` value).
+    #: When this is False the probe produced no usable evidence at all -- the
+    #: binary may be missing options, lack the privileges it needs, or be a
+    #: different implementation -- so "100% packet loss" must not be claimed.
+    parseable: bool = False
 
     @property
     def ok(self) -> bool:
@@ -60,13 +72,21 @@ def _parse_ping_output(host: str, stdout: str, count: int) -> PingOutcome:
     match = _RTT_RE.search(stdout)
     if match:
         outcome.avg_ms = float(match.group(2))
+        outcome.parseable = True
     else:
-        times = [float(m.group(1)) for m in _TIME_RE.finditer(stdout)]
-        if times:
-            outcome.avg_ms = sum(times) / len(times)
+        win_avg = _WIN_AVG_RE.search(stdout)
+        if win_avg:
+            outcome.avg_ms = float(win_avg.group(1))
+            outcome.parseable = True
+        else:
+            times = [float(m.group(1)) for m in _TIME_RE.finditer(stdout)]
+            if times:
+                outcome.avg_ms = sum(times) / len(times)
+                outcome.parseable = True
 
-    loss_match = re.search(r"([\d.]+)%\s*packet loss", stdout)
+    loss_match = _LOSS_RE.search(stdout)
     if loss_match:
+        outcome.parseable = True
         outcome.loss_percent = float(loss_match.group(1))
         outcome.transmitted = count
         outcome.received = round(count * (1 - outcome.loss_percent / 100.0))
@@ -89,6 +109,42 @@ def _tcp_latency(host: str, port: int, timeout: float) -> Optional[float]:
         return None
 
 
+def _ping_per_probe_seconds(cfg: Config) -> int:
+    """Per-reply wait, in whole seconds (iputils/BusyBox ``-W`` unit)."""
+    return max(1, math.ceil(cfg.network.ping_timeout_seconds))
+
+
+def _ping_deadline_seconds(cfg: Config) -> int:
+    """Overall ping deadline, in whole seconds (``-w`` unit)."""
+    return max(1, math.ceil(cfg.network.ping_count * cfg.network.ping_timeout_seconds))
+
+
+def _ping_argv(cfg: Config, host: str) -> List[str]:
+    """Build the ``ping`` argument vector for the current platform.
+
+    Linux/iputils uses ``-c`` (count), ``-W`` (per-reply wait) and ``-w``
+    (overall deadline) in **whole seconds**; Windows ``ping`` uses ``-n``
+    (count) and ``-w`` (per-reply timeout) in **milliseconds** and has no
+    deadline option.  Either way an unreachable host costs at most
+    ``ping_count * ping_timeout_seconds`` instead of hanging until the outer
+    subprocess timeout kills the process.
+    """
+    if sys.platform == "win32":
+        return [
+            "ping",
+            "-n", str(cfg.network.ping_count),
+            "-w", str(int(round(cfg.network.ping_timeout_seconds * 1000))),
+            host,
+        ]
+    return [
+        "ping",
+        "-c", str(cfg.network.ping_count),
+        "-W", str(_ping_per_probe_seconds(cfg)),
+        "-w", str(_ping_deadline_seconds(cfg)),
+        host,
+    ]
+
+
 def _split_host_port(spec: str) -> Tuple[Optional[str], Optional[int]]:
     """Split ``host:port`` or ``[v6]:port`` into (host, port)."""
     spec = spec.strip()
@@ -104,27 +160,47 @@ def _split_host_port(spec: str) -> Tuple[Optional[str], Optional[int]]:
     return None, None
 
 
+def _tcp_fallback(cfg: Config, host: str, reason: str) -> CheckResult:
+    """Degrade to a TCP-connect probe against :data:`TCP_FALLBACK_PORT`.
+
+    Used when ICMP cannot be used at all (no ``ping`` binary, or a probe
+    that produced no parseable output).  *reason* is recorded in the result
+    so reports explain *why* ICMP was skipped.
+    """
+    latency = _tcp_latency(host, TCP_FALLBACK_PORT, cfg.network.tcp_timeout_seconds)
+    if latency is not None:
+        return info(
+            "network.ping",
+            f"host {host} reachable via TCP :{TCP_FALLBACK_PORT} in {latency:.0f} ms "
+            f"({reason})",
+            host, latency_ms=round(latency, 1), method="tcp_fallback", note=reason)
+    return critical(
+        "network.ping",
+        f"host {host} unreachable: {reason} and the TCP probe to "
+        f":{TCP_FALLBACK_PORT} failed",
+        host, method="tcp_fallback", note=reason)
+
+
 def _check_ping(cfg: Config, host: str) -> CheckResult:
     """Ping one host; degrade to a TCP latency probe when ICMP is unusable."""
-    argv = ["ping", "-c", str(cfg.network.ping_count),
-            "-W", str(int(cfg.network.ping_timeout_seconds * 1000)), host]
-    res = run_command(argv, timeout=cfg.general.timeout_for(cfg.network.ping_count * cfg.network.ping_timeout_seconds + 2))
+    timeout = cfg.general.timeout_for(_ping_deadline_seconds(cfg) + 2)
+    res = run_command(_ping_argv(cfg, host), timeout=timeout)
 
     if res.missing:
-        latency = _tcp_latency(host, TCP_FALLBACK_PORT, cfg.network.tcp_timeout_seconds)
-        if latency is not None:
-            return info(
-                "network.ping", f"ping binary unavailable; TCP probe to {host}:{TCP_FALLBACK_PORT} "
-                f"succeeded in {latency:.0f} ms", host, latency_ms=round(latency, 1), method="tcp_fallback")
-        return critical("network.ping", f"host {host} unreachable (no ping binary, TCP probe failed)", host,
-                        method="tcp_fallback")
+        return _tcp_fallback(cfg, host, reason="the ping binary is unavailable")
 
     outcome = _parse_ping_output(host, res.stdout, cfg.network.ping_count)
 
     if res.timed_out:
         return critical("network.ping", f"ping to {host} timed out after "
-                        f"{cfg.general.timeout_for(cfg.network.ping_count * cfg.network.ping_timeout_seconds + 2):.0f}s",
-                        host, method="icmp")
+                        f"{timeout:.0f}s", host, method="icmp")
+    if not outcome.parseable:
+        # The probe produced no usable ICMP evidence (unsupported options, no
+        # ICMP privileges, output we cannot parse).  Saying "100% packet loss"
+        # here would be a false CRITICAL, so fall back to TCP instead.
+        first_err = next((line.strip() for line in res.stderr.splitlines() if line.strip()), "")
+        detail = first_err[:120] or f"ping exited with status {res.returncode}"
+        return _tcp_fallback(cfg, host, reason=f"the ICMP probe was unusable ({detail})")
     if not outcome.ok:
         return critical("network.ping", f"host {host} unreachable: 100% packet loss ({cfg.network.ping_count} probes)",
                         host, method="icmp", loss_percent=100.0)
@@ -155,20 +231,35 @@ def _check_tcp(cfg: Config, spec: str) -> CheckResult:
               port=port, latency_ms=round(latency, 1))
 
 
-def _resolve(host: str, server: Optional[str]) -> Optional[str]:
+@dataclass
+class ResolveOutcome:
+    """Result of one resolver attempt."""
+
+    address: Optional[str] = None
+    #: ``"dig"``, ``"system"`` or ``"none"`` (the tool was not usable).
+    method: str = "none"
+    error: str = ""
+
+
+def _resolve(host: str, server: Optional[str]) -> ResolveOutcome:
     """Resolve *host*, optionally against a specific DNS *server*."""
     if server:
         res = run_command(["dig", "+short", f"@{server}", host], timeout=5)
+        if res.missing:
+            return ResolveOutcome(None, "none", "dig is not installed")
         if res.ran and res.returncode == 0:
             first = res.first_line()
-            return first or None
+            if first:
+                return ResolveOutcome(first, "dig")
+            return ResolveOutcome(None, "dig", "empty answer")
+        first_err = next((line.strip() for line in res.stderr.splitlines() if line.strip()), "")
         logger.debug("dig against %s failed: %s", server, res.stderr.strip())
-        return None
+        return ResolveOutcome(None, "dig", first_err[:120] or f"dig exited with status {res.returncode}")
     try:
-        return socket.gethostbyname(host)
+        return ResolveOutcome(socket.gethostbyname(host), "system")
     except OSError as exc:
         logger.debug("gethostbyname(%s) failed: %s", host, exc)
-        return None
+        return ResolveOutcome(None, "system", str(exc))
 
 
 def _check_dns(cfg: Config) -> CheckResult:
@@ -176,12 +267,30 @@ def _check_dns(cfg: Config) -> CheckResult:
     host = cfg.network.dns_host
     servers = cfg.network.dns_servers
     if not servers:
-        addr = _resolve(host, None)
-        if addr:
-            return ok("network.dns", f"resolved {host} -> {addr} (system resolver)", host, address=addr)
-        return critical("network.dns", f"failed to resolve {host} via system resolver", host)
+        outcome = _resolve(host, None)
+        if outcome.address:
+            return ok("network.dns", f"resolved {host} -> {outcome.address} (system resolver)",
+                      host, address=outcome.address)
+        return critical("network.dns",
+                        f"failed to resolve {host} via system resolver: {outcome.error}", host)
 
-    failures = [s for s in servers if not _resolve(host, s)]
+    outcomes: Dict[str, ResolveOutcome] = {s: _resolve(host, s) for s in servers}
+    if all(o.method == "none" for o in outcomes.values()):
+        # ``dig`` is not installed, so a "all configured servers failed" verdict
+        # would blame DNS for a missing utility.  Use the system resolver instead.
+        system = _resolve(host, None)
+        if system.address:
+            return warning(
+                "network.dns",
+                f"dig is not installed; resolved {host} -> {system.address} via the system "
+                f"resolver (per-server checks against {', '.join(servers)} were skipped)",
+                host, address=system.address, servers=servers, method="system")
+        return critical(
+            "network.dns",
+            f"failed to resolve {host}: dig is not installed and the system resolver "
+            f"also failed ({system.error})", host, servers=servers)
+
+    failures = [s for s, o in outcomes.items() if not o.address]
     if not failures:
         return ok("network.dns", f"resolved {host} via {len(servers)} configured server(s)", host,
                   servers=servers)

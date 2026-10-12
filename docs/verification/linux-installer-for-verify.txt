@@ -1,0 +1,37 @@
+[1;32m==>[0m creating service user 'lintest' (system account, no login shell)
+[1;32m==>[0m added lintest to group 'adm' (log access)
+[1;32m==>[0m added lintest to group 'systemd-journal' (log access)
+[1;32m==>[0m creating directories
+[1;32m==>[0m copying application to /opt/lintest
+[1;32m==>[0m installed default config to /opt/lintest/config.yaml
+[1;32m==>[0m creating virtualenv and installing the package
+[1;32m==>[0m installed lintest 1.0.0
+[1;33mWARN[0m created /opt/lintest/.env -- EDIT IT and set LINTEST_TELEGRAM_TOKEN / LINTEST_TELEGRAM_CHAT_ID
+[1;32m==>[0m running smoke test (one check pass as lintest)
+2026-10-12 04:44:17 WARNING  lintest.alerts.telegram: Telegram alerts enabled but LINTEST_TELEGRAM_TOKEN / LINTEST_TELEGRAM_CHAT_ID are not set in the environment -- channel disabled
+2026-10-12 04:44:17 INFO     lintest.main: dry run: alert dispatch skipped (3 problem(s) found)
+LinTest 1.0.0 | host TarunGudipati | 2026-10-12 04:44:12Z
+------------------------------------------------------------------------------
+ . OK       system.cpu         [cpu]                  CPU usage 0.0% (12 cores)
+ . OK       system.ram         [ram]                  RAM usage 6.8% (0.5/7.6 GiB)
+ . OK       system.disk        [/]                    disk / 0.2% used (953.7/1006.9 GiB free on ext4)
+ . OK       system.disk        [/mnt/wslg/distro]     disk /mnt/wslg/distro 0.2% used (953.7/1006.9 GiB free on ext4)
+ . OK       system.load        [load]                 load1 0.65 (0.05/core over 12 cores; 5m 0.21, 15m 0.07)
+ X CRITICAL services.active    [sshd]                 service 'sshd' is inactive (tier: critical)
+ ! WARNING  services.active    [nginx]                service 'nginx' is inactive (tier: warning)
+ ! WARNING  services.active    [docker]               service 'docker' is inactive (tier: warning)
+ . OK       network.ping       [1.1.1.1]              host 1.1.1.1 reachable: avg 215 ms, loss 0%
+ . OK       network.ping       [8.8.8.8]              host 8.8.8.8 reachable: avg 216 ms, loss 0%
+ . OK       network.tcp        [1.1.1.1:443]          connected to 1.1.1.1:443 in 216 ms
+ . OK       network.dns        [google.com]           resolved google.com -> 64.233.180.102 (system resolver)
+ . OK       security.ssh       [ssh]                  0 failed SSH logins in the last 15 min (source: /var/log/auth.log)
+------------------------------------------------------------------------------
+Result: CRITICAL (10 ok, 2 warning(s), 1 critical, 0 error(s) in 5.5s) | exit code 1
+[1;32m==>[0m smoke test ok (exit 1)
+[1;32m==>[0m done. Next steps:
+    1. edit /opt/lintest/.env           (Telegram token + chat id)
+    2. edit /opt/lintest/config.yaml    (thresholds, services, hosts)
+    3. one pass now:  /opt/lintest/.venv/bin/lintest --config /opt/lintest/config.yaml --dry-run
+    4. timer status:  systemctl list-timers lintest.timer
+    5. logs:          journalctl -u lintest.service -f   (or /var/log/lintest/lintest.log)
+exit code: 0

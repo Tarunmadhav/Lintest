@@ -1,0 +1,191 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: tests (python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+      - name: Lint (ruff)
+        run: python -m ruff check lintest tests
+
+      - name: Unit tests with coverage
+        run: python -m pytest tests --cov=lintest --cov-report=term-missing --cov-report=xml
+
+      - name: Upload coverage data
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: error
+
+  linux-integration:
+    name: linux integration (real systemctl / ping / logs)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install runtime dependencies only
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Run one real check pass against this machine
+        env:
+          LINTEST_STATE_FILE: ${{ runner.temp }}/lintest-state.json
+        run: |
+          set +e
+          python -m lintest --config config.yaml --dry-run --once \
+            --output json --report "$RUNNER_TEMP/report.html" > "$RUNNER_TEMP/report.json"
+          rc=$?
+          set -e
+          echo "exit code: $rc (0 = no CRITICAL, 1 = CRITICAL found)"
+          test "$rc" -le 1
+          python -c "import json,pathlib,sys; d=json.loads(pathlib.Path('$RUNNER_TEMP/report.json').read_text()); print('checks:', d['summary']['total'], 'worst:', d['summary']['worst']); sys.exit(0 if d['summary']['total'] > 0 else 1)"
+          test -s "$RUNNER_TEMP/report.html"
+          test ! -e "$LINTEST_STATE_FILE"   # --dry-run must not arm cooldowns
+
+      - name: Show the rendered report
+        run: head -c 400 "$RUNNER_TEMP/report.json"
+
+  packaging:
+    name: package build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+          python -m twine check dist/*
+
+      - name: Install the wheel into a clean venv and run the CLI
+        env:
+          LINTEST_STATE_FILE: /tmp/lintest-wheel-state.json
+        run: |
+          python -m venv /tmp/wheel-venv
+          /tmp/wheel-venv/bin/pip install --quiet dist/*.whl
+          /tmp/wheel-venv/bin/lintest --version
+          /tmp/wheel-venv/bin/lintest --config config.yaml --dry-run --once --output json \
+            > /tmp/wheel-report.json || test $? -le 1
+          python -c "import json,pathlib; print(json.loads(pathlib.Path('/tmp/wheel-report.json').read_text())['summary'])"
+
+      - name: Confirm the wheel ships the modules and no tests
+        run: |
+          python - <<'PY'
+          import zipfile, pathlib
+          wheel = next(pathlib.Path("dist").glob("*.whl"))
+          names = zipfile.ZipFile(wheel).namelist()
+          assert any(n.startswith("lintest/checks/") for n in names), names
+          assert not any(n.startswith("tests/") for n in names), names
+          print("wheel contents ok:", len(names), "entries")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+          if-no-files-found: error
+
+  installer:
+    name: installer (ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install (files + venv + smoke test, no scheduler)
+        run: sudo ./install.sh --no-schedule
+
+      - name: Operator config and secrets survive a second install
+        run: |
+          echo "# operator edit" | sudo tee -a /opt/lintest/config.yaml > /dev/null
+          echo "LINTEST_TELEGRAM_TOKEN=ci-placeholder" | sudo tee -a /opt/lintest/.env > /dev/null
+          sudo ./install.sh --no-schedule
+          sudo grep -q "operator edit" /opt/lintest/config.yaml
+          sudo grep -q "ci-placeholder" /opt/lintest/.env
+          sudo test "$(stat -c '%a' /opt/lintest/.env)" = "640"
+
+      - name: The service user can run a pass but cannot rewrite the code
+        run: |
+          set +e
+          sudo -u lintest env LINTEST_STATE_FILE=/var/lib/lintest/state.json \
+            /opt/lintest/.venv/bin/lintest --config /opt/lintest/config.yaml --dry-run --once
+          rc=$?
+          set -e
+          test "$rc" -le 1
+          if sudo -u lintest touch /opt/lintest/main.py 2>/dev/null; then
+            echo "service user must not be able to modify the installation"; exit 1
+          fi
+
+      - name: Uninstall preserves the operator config and the logs
+        run: |
+          sudo ./install.sh --uninstall
+          sudo test -n "$(sudo find /var/backups/lintest -name 'config.yaml.*' -print -quit)"
+          sudo test ! -d /opt/lintest
+          sudo test -d /var/log/lintest
+
+      - name: Purge removes the service user as well
+        run: |
+          sudo ./install.sh --uninstall --purge
+          sudo test ! -d /var/log/lintest
+          if id -u lintest > /dev/null 2>&1; then
+            echo "service user still present after --purge"; exit 1
+          fi
+
+  systemd-units:
+    name: install assets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Shell syntax
+        run: bash -n install.sh
+
+      - name: systemd unit verification
+        run: |
+          systemd-analyze verify systemd/lintest.service systemd/lintest.timer 2>&1 | tee /tmp/verify.log
+          ! grep -qE "Unknown key|Failed to parse|Invalid (setting|argument)|ordering cycle|cyclic ordering" /tmp/verify.log
+
+      - name: Static asset and secret-hygiene tests
+        run: |
+          python -m pip install --quiet pytest pyyaml
+          python -m pytest tests/test_automation_files.py -v

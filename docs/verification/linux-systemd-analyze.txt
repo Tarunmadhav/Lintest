@@ -1,0 +1,3 @@
+$ systemd-analyze verify systemd/lintest.service systemd/lintest.timer
+date: 2026-10-12T04:43:44Z (WSL Ubuntu; app installed at /opt/lintest)
+exit code: 0

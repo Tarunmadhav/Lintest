@@ -9,10 +9,11 @@ services only produce WARNING results.  When systemctl itself is missing
 from __future__ import annotations
 
 import logging
+import sys
 from typing import List
 
 from lintest.config import Config
-from lintest.models import CheckResult, critical, error, ok, warning
+from lintest.models import CheckResult, critical, error, info, ok, warning
 from lintest.utils.shell import run_command
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,16 @@ def _check_one_service(cfg: Config, name: str, tier: str) -> CheckResult:
     res = run_command(["systemctl", "is-active", name], timeout=timeout)
 
     if res.missing:
+        if sys.platform == "win32":
+            # Windows has no systemctl: report an explicit, non-problem status
+            # instead of an ERROR that would alert on every pass.
+            return info(
+                "services.systemctl",
+                f"service checks unsupported on Windows -- systemctl is Linux-only "
+                f"(cannot check service '{name}')",
+                name,
+                tier=tier,
+            )
         return error(
             "services.systemctl",
             f"systemctl not available -- cannot check service '{name}'",

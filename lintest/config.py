@@ -25,8 +25,24 @@ VALID_LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 VALID_PARSE_MODES = ("", "HTML", "Markdown", "MarkdownV2")
 #: Schedule modes accepted in ``schedule.mode``.
 VALID_SCHEDULE_MODES = ("timer", "daemon")
-#: Fraction below a threshold that still triggers a WARNING.
+#: Absolute early-warning band, in the same unit as the threshold (percent
+#: points for CPU/RAM/disk).
 WARNING_BAND = 10.0
+#: Relative early-warning band, used when a threshold is too small for the
+#: absolute band to make sense (e.g. ``load1_per_core: 1.5`` -- a fixed 10 point
+#: band would classify *every* observable value as a WARNING).
+WARNING_BAND_FRACTION = 0.25
+
+
+def warning_band(threshold: float) -> float:
+    """Return the WARNING band for *threshold*.
+
+    The band is the smaller of :data:`WARNING_BAND` and
+    :data:`WARNING_BAND_FRACTION` of the threshold, so a value is WARNING when
+    it is within 10 percent-points of a percentage threshold (unchanged
+    behaviour) or within 25% of a small threshold such as ``load1_per_core``.
+    """
+    return min(WARNING_BAND, threshold * WARNING_BAND_FRACTION)
 
 
 class ConfigError(Exception):
@@ -85,10 +101,11 @@ class ThresholdsConfig:
                 f"{value:.1f} is at or above the critical threshold "
                 f"({threshold:.1f})",
             )
-        if value >= threshold - WARNING_BAND:
+        band = warning_band(threshold)
+        if value >= threshold - band:
             return (
                 "WARNING",
-                f"{value:.1f} is within {WARNING_BAND:.0f} points of the "
+                f"{value:.1f} is within {band:g} points of the "
                 f"critical threshold ({threshold:.1f})",
             )
         return ("OK", None)
@@ -345,7 +362,8 @@ def _mapping_field(
 def _parse_general(raw: Mapping[str, Any], errors: List[str]) -> GeneralConfig:
     s = _section(raw, "general", errors)
     return GeneralConfig(
-        check_timeout_seconds=_num(s, "check_timeout_seconds", errors, "general", minimum=0.1, maximum=600, default=5.0),
+        check_timeout_seconds=_num(s, "check_timeout_seconds", errors, "general",
+                                   minimum=0.1, maximum=600, default=5.0),
     )
 
 
@@ -441,7 +459,8 @@ def _parse_alerts(raw: Mapping[str, Any], errors: List[str]) -> AlertsConfig:
         token_env=_str_field(telegram_s, "token_env", errors, "alerts.telegram", "LINTEST_TELEGRAM_TOKEN"),
         chat_id_env=_str_field(telegram_s, "chat_id_env", errors, "alerts.telegram", "LINTEST_TELEGRAM_CHAT_ID"),
         parse_mode=_enum(telegram_s, "parse_mode", errors, "alerts.telegram", VALID_PARSE_MODES, "HTML"),
-        timeout_seconds=_num(telegram_s, "timeout_seconds", errors, "alerts.telegram", minimum=1, maximum=60, default=10.0),
+        timeout_seconds=_num(telegram_s, "timeout_seconds", errors, "alerts.telegram",
+                             minimum=1, maximum=60, default=10.0),
     )
     for env_name in (telegram.token_env, telegram.chat_id_env):
         if not env_name.replace("_", "").isalnum() or not env_name.isidentifier():

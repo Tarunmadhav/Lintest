@@ -1,0 +1,4 @@
+$ python -m ruff check lintest tests
+date: 2026-10-12T05:20:46Z (NATIVE Windows, python 3.11.9, %TEMP% venv -- NOT WSL)
+All checks passed!
+exit code: 0

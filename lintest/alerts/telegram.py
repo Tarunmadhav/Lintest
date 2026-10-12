@@ -62,6 +62,18 @@ class TelegramChannel(AlertChannel):
 
     # -- formatting ---------------------------------------------------------
 
+    def _redact(self, text: str) -> str:
+        """Remove the bot token from anything about to be logged.
+
+        ``requests`` embeds the full request URL in its exception messages
+        (``.../bot<token>/sendMessage``) and Telegram echoes it back in some
+        error bodies, so every log line goes through this first: a secret must
+        never end up in the log file, journal or an issue report.
+        """
+        if self._token and self._token in text:
+            return text.replace(self._token, "<bot-token>")
+        return text
+
     def _escape(self, text: str) -> str:
         """Escape *text* for the configured parse mode (plain when empty)."""
         mode = self._cfg.parse_mode
@@ -106,17 +118,18 @@ class TelegramChannel(AlertChannel):
                 timeout=self._cfg.timeout_seconds,
             )
         except requests.RequestException as exc:
-            logger.warning("telegram send failed: %s", exc)
+            logger.warning("telegram send failed: %s", self._redact(str(exc)))
             return False
         if resp.status_code != 200:
             logger.warning("telegram send failed: HTTP %s %s",
-                           resp.status_code, resp.text[:200])
+                           resp.status_code, self._redact(resp.text[:200]))
             return False
         try:
             ok_flag = bool(resp.json().get("ok", True))
         except ValueError:
             ok_flag = True
         if not ok_flag:
-            logger.warning("telegram API rejected the message: %s", resp.text[:200])
+            logger.warning("telegram API rejected the message: %s",
+                           self._redact(resp.text[:200]))
             return False
         return True

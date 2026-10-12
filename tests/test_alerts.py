@@ -7,13 +7,11 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import List
 
-import pytest
-
 from lintest.alerts.base import Alert, alert_from_result
 from lintest.alerts.console import ConsoleChannel
 from lintest.alerts.manager import AlertManager
 from lintest.alerts.telegram import TelegramChannel
-from lintest.models import CheckResult, Severity, critical, warning
+from lintest.models import Severity, critical, warning
 
 
 class FakeClock:

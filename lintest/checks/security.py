@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import logging
 import re
+import sys
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -31,17 +32,19 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from lintest.config import Config
-from lintest.models import CheckResult, FailedLoginSummary, critical, ok, warning
+from lintest.models import CheckResult, FailedLoginSummary, critical, info, ok, warning
 from lintest.utils.shell import run_command
 
 logger = logging.getLogger(__name__)
 
-#: Matches the ``sshd[pid]:`` line prefix in both timestamp styles.
+#: Matches the ``sshd[pid]:`` line prefix in both timestamp styles.  OpenSSH
+#: 9.8+ logs some messages from ``sshd-session[pid]``, so that prefix is
+#: accepted too -- missing it would silently report "0 failed logins".
 _SSHD_PREFIX_RE = re.compile(
     r"^(?:"
     r"(?P<ts_syslog>[A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})"
     r"|(?P<ts_iso>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?)"
-    r")\s+\S+\s+sshd\[\d+\]:\s*(?P<msg>.*)$"
+    r")\s+\S+\s+sshd(?:-session)?\[\d+\]:\s*(?P<msg>.*)$"
 )
 #: ``Failed password for root from 1.2.3.4 port 22 ssh2`` (also publickey etc.)
 _FAILED_RE = re.compile(
@@ -56,6 +59,12 @@ _INVALID_USER_RE = re.compile(
 #: Tolerance added after ``now`` when filtering, to absorb small clock skew
 #: between the log source and the monitoring host.
 _FUTURE_SKEW = timedelta(minutes=2)
+
+#: Upper bound on how many bytes of the auth log are read per pass.  Only the
+#: tail can contain events inside the (short) rolling window, and slurping a
+#: multi-hundred-megabyte ``auth.log`` every five minutes would waste I/O and
+#: memory.  4 MiB is far more than any realistic window needs.
+MAX_LOG_READ_BYTES = 4 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -122,10 +131,17 @@ def parse_auth_line(
     if not failed:
         return None
 
-    if match.group("ts_syslog"):
-        ts = _parse_syslog_ts(match.group("ts_syslog"), now, year_hint)
-    else:
-        ts = _parse_iso_ts(match.group("ts_iso"))
+    try:
+        if match.group("ts_syslog"):
+            ts = _parse_syslog_ts(match.group("ts_syslog"), now, year_hint)
+        else:
+            ts = _parse_iso_ts(match.group("ts_iso"))
+    except ValueError:
+        # Line *shape* matched but the timestamp is nonsense (a corrupted or
+        # truncated log entry, e.g. "Jul 32 99:99:99").  A tolerant parser
+        # ignores it instead of failing the whole security check.
+        logger.debug("unparseable timestamp in log line: %r", line[:120])
+        return None
     return LogEvent(ts=ts, ip=failed.group("ip"), user=failed.group("user"), raw=line.rstrip())
 
 
@@ -171,9 +187,28 @@ def summarize_lines(
 # ---------------------------------------------------------------------------
 
 
-def _read_lines(path: Path) -> List[str]:
-    """Read a log file defensively (undecodable bytes become U+FFFD)."""
-    return path.read_text(encoding="utf-8", errors="replace").splitlines()
+def _read_lines(path: Path, max_bytes: int = MAX_LOG_READ_BYTES) -> List[str]:
+    """Read the *tail* of a log file defensively.
+
+    At most *max_bytes* are read, so a huge or rapidly growing ``auth.log``
+    cannot exhaust memory.  Undecodable bytes become U+FFFD, and when the file
+    was truncated the first (partial) line is dropped so it can never be
+    parsed as a half-written event.
+    """
+    with path.open("rb") as handle:
+        try:
+            size = path.stat().st_size
+        except OSError:  # pragma: no cover - stat rarely fails after open()
+            size = 0
+        truncated = size > max_bytes
+        if truncated:
+            handle.seek(size - max_bytes)
+        data = handle.read(max_bytes)
+    lines = data.decode("utf-8", errors="replace").splitlines()
+    if truncated and lines:
+        logger.debug("read last %d of %d bytes of %s", max_bytes, size, path)
+        lines = lines[1:]
+    return lines
 
 
 def collect_failed_logins(cfg: Config, now: Optional[datetime] = None) -> FailedLoginSummary:
@@ -243,6 +278,15 @@ def run_security_check(cfg: Config, now: Optional[datetime] = None) -> List[Chec
     }
 
     if not summary.source:
+        if sys.platform == "win32":
+            # Expected on Windows (no auth.log, no journalctl): an explicit
+            # 'skipped' status, not a WARNING that would alert on every pass.
+            return [info(
+                "security.ssh",
+                "security.ssh skipped on Windows -- no SSH auth source "
+                "(auth.log and journalctl are Linux-only)",
+                "ssh", **details,
+            )]
         return [warning(
             "security.ssh",
             "no SSH auth source available (auth log missing, journalctl unavailable)",

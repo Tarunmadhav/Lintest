@@ -1,0 +1,114 @@
+LinTest -- NATIVE WINDOWS VERIFICATION (not WSL)
+Captured 2026-10-12. All commands ran as Windows processes under Git Bash
+using the venv at %TEMP%\lintest-win-venv (C:\Users\tarun\AppData\Local\Temp\lintest-win-venv),
+Python from `python` (3.11.9). No WSL involved.
+
+=====================================================================
+$ python -c "import platform,sys;print(platform.platform(),sys.version)"
+Windows-10-10.0.26220-SP0 3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]
+
+=====================================================================
+$ python -m ruff check lintest tests
+All checks passed!
+exit code: 0
+
+=====================================================================
+$ python -m pytest tests --cov=lintest --cov-report=term   (venv, native)
+413 passed, 2 skipped in 14.06s
+exit code: 0
+TOTAL                               1373     59    96%
+
+Skip reasons (both name their platform reason, neither is vacuous):
+  SKIPPED [1] tests/test_automation_files.py: systemd-analyze not available
+  SKIPPED [1] tests/test_state_file.py: POSIX permissions only
+
+(Windows counts next to Linux, same tree, after the platform fixes:
+ Windows 413 passed + 2 skipped, 96% -- Linux: see linux-pytest-coverage.txt,
+ re-run on this tree in this session.)
+
+=====================================================================
+$ python -m lintest --config config.yaml --dry-run --once    (README-documented CLI)
+LinTest 1.0.0 | host TarunGudipati | 2026-10-12 05:14:51Z
+------------------------------------------------------------------------------
+ . OK       system.cpu         [cpu]                  CPU usage 25.8% (12 cores)
+ . OK       system.ram         [ram]                  RAM usage 76.4% (11.9/15.6 GiB)
+ X CRITICAL system.disk        [C:\]                  disk C:\ 91.2% used (17.5/199.4 GiB free on NTFS) -- at or above critical threshold (90)
+ . OK       system.disk        [D:\]                  disk D:\ 47.9% used (71.8/137.7 GiB free on NTFS)
+ . OK       system.disk        [E:\]                  disk E:\ 50.9% used (67.7/137.7 GiB free on NTFS)
+ . OK       system.load        [load]                 load average not available on this platform
+ i INFO     services.systemctl [sshd]                 service checks unsupported on Windows -- systemctl is Linux-only (cannot check service 'sshd')
+ i INFO     services.systemctl [nginx]                service checks unsupported on Windows -- systemctl is Linux-only (cannot check service 'nginx')
+ i INFO     services.systemctl [docker]               service checks unsupported on Windows -- systemctl is Linux-only (cannot check service 'docker')
+ . OK       network.ping       [1.1.1.1]              host 1.1.1.1 reachable: avg 49 ms, loss 0%
+ . OK       network.ping       [8.8.8.8]              host 8.8.8.8 reachable: avg 52 ms, loss 0%
+ . OK       network.tcp        [1.1.1.1:443]          connected to 1.1.1.1:443 in 78 ms
+ . OK       network.dns        [google.com]           resolved google.com -> 142.251.221.206 (system resolver)
+ i INFO     security.ssh       [ssh]                  security.ssh skipped on Windows -- no SSH auth source (auth.log and journalctl are Linux-only)
+------------------------------------------------------------------------------
+Result: CRITICAL (9 ok, 0 warning(s), 1 critical, 0 error(s) in 5.2s) | exit code 1
+exit code: 1
+(no traceback; the single CRITICAL is a TRUE POSITIVE: C:\ really is 91% full --
+independently confirmed with `df -h /c` -> 184G/200G, 93%)
+
+=====================================================================
+Exit codes (README: 0 OK/WARNING, 1 CRITICAL, 2 usage) -- all three live on Windows:
+  exit 0: config with thresholds.disk_percent=99 -> "Result: WARNING ... exit code 0" -> RC=0
+  exit 1: default config (C:\ critical)          -> "Result: CRITICAL ..."        -> RC=1
+  exit 2: --config <missing file>                -> "Configuration error: Config file not found:
+                                                     C:\Users\tarun\AppData\Local\Temp\does-not-exist.yaml" -> RC=2
+  (config path resolution uses real Windows TEMP -- no POSIX path leaked)
+
+Unreachable host (real Windows ping.exe, TEST-NET blackhole 203.0.113.7):
+  argv: ['ping', '-n', '3', '-w', '2000', '203.0.113.7']
+  CRITICAL | host 203.0.113.7 unreachable: 100% packet loss (3 probes) | method=icmp
+  -> packet loss, NOT a parse failure, NOT a TCP fallback.
+
+Alert state (native, non-dry-run passes):
+  run 1: alert sent: system.disk [C:\]         -> state written
+  run 2: 1 alert(s) suppressed by cooldown      -> cooldown persisted across processes
+  state: valid JSON at C:\Users\tarun\.lintest\state.json, entries ['system.disk::C:\\']
+  mode: 666 (Windows chmod semantics -- os.chmod(0o600) did NOT crash; Windows has no POSIX bits)
+
+Console encoding (REAL cp1252 console via PYTHONIOENCODING=cp1252, Unicode service name):
+  i INFO services.systemctl [svc-???] service checks unsupported on Windows ...
+  exit code: 0
+  -> unencodable characters degrade to '?'; no UnicodeEncodeError, no traceback.
+
+Import-time safety:
+  $ python -c "import lintest, lintest.main, lintest.checks.network, lintest.checks.security, lintest.alerts.manager"
+  all modules import clean   (no SIGHUP/SIGKILL/fcntl/pwd/grp access at import -- none exists in lintest/)
+
+=====================================================================
+WINDOWS STATUS TABLE
+check            | Windows status                          | how verified
+-----------------+-----------------------------------------+-----------------------------
+system.cpu       | works (real psutil values)              | real (live dry-run + suite)
+system.ram       | works (real psutil values)              | real (live dry-run + suite)
+system.disk      | works (real C:\ D:\ E:\ NTFS values;    | real (live dry-run; values
+                 | true-positive CRITICAL on the 91% C:)   | cross-checked with df -h)
+system.load      | unsupported: OK "not available on       | real (native run; os.getloadavg
+                 | this platform" (os.getloadavg absent)   | absent on Windows)
+services.*       | unsupported: INFO "unsupported on       | real (native run, systemctl
+                 | Windows" xN; NOT critical, NOT a        | missing) + unit tests with
+                 | problem -> no alert noise, exit 0       | pinned sys.platform
+network.ping     | works: real ICMP via `ping -n N -w ms`  | real (native run: 1.1.1.1 avg
+                 | + Windows output parser; unreachable    | 49 ms; blackhole -> 100% loss
+                 | host -> true 100% packet loss CRITICAL  | CRITICAL) + fixture unit tests
+network.tcp      | works (socket.create_connection)        | real (native run + suite)
+network.dns      | works: NO dig -> socket.gethostbyname   | real (native run "(system
+                 | (the "system" resolver path)            | resolver)") -- gethostbyname,
+                 |                                         | not nslookup
+security.ssh     | skipped: INFO "skipped on Windows --    | real (native run) + unit tests
+                 | no SSH auth source"; no traceback       | with pinned sys.platform
+alerts state     | works: ~/.lintest/state.json, atomic    | real (two native runs +
+                 | mkstemp+os.replace; PermissionError     | cooldown) + unit tests
+                 | on replace handled (warning, no crash)  | (incl. new PermissionError test)
+telegram         | platform-neutral: _redact() strips      | unit tests (string-level,
+                 | token from exceptions on any OS         | no platform branch)
+console output   | cp1252-safe: '?' replacement, no crash  | real (PYTHONIOENCODING=cp1252
+                 |                                         | run) + unit test
+exit codes       | 0 / 1 / 2 as documented                 | real (three live runs)
+timing/daemon    | daemon loop untested (no long-run)      | not verified (by design)
+
+NOT verified on Windows: systemd/cron/installer (Linux-only by product design,
+see install.sh), live Telegram API (no secrets in repo), long-running daemon mode.

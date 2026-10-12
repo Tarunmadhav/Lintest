@@ -1,0 +1,5 @@
+$ python -m twine check dist/*
+date: 2026-10-12T04:44:26Z (WSL Ubuntu)
+Checking dist/lintest-1.0.0-py3-none-any.whl: [32mPASSED[0m
+Checking dist/lintest-1.0.0.tar.gz: [32mPASSED[0m
+exit code: 0

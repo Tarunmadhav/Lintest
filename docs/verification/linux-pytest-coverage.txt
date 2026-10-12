@@ -1,0 +1,41 @@
+$ TZ=UTC python -m pytest tests --cov=lintest --cov-report=term -rs
+date: 2026-10-12T05:21:26Z (WSL Ubuntu, python 3.14.4)
+........................................................................ [ 17%]
+..s..................................................................... [ 34%]
+........................................................................ [ 52%]
+........................................................................ [ 69%]
+........................................................................ [ 86%]
+.......................................................                  [100%]
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.14.4-final-0 ________________
+
+Name                               Stmts   Miss  Cover   Missing
+----------------------------------------------------------------
+lintest/__init__.py                    2      0   100%
+lintest/__main__.py                    4      4     0%   3-8
+lintest/alerts/__init__.py             5      0   100%
+lintest/alerts/base.py                26      1    96%   60
+lintest/alerts/console.py             30      6    80%   40-41, 43, 46-48
+lintest/alerts/manager.py            145      6    96%   77-80, 177-178
+lintest/alerts/telegram.py            75      3    96%   83-85
+lintest/checks/__init__.py             6      0   100%
+lintest/checks/base.py                16      0   100%
+lintest/checks/network.py            171     16    91%   74-75, 103-109, 253, 255-257, 260-262
+lintest/checks/security.py           131      1    99%   308
+lintest/checks/services.py            34      0   100%
+lintest/checks/system.py             106      2    98%   72, 122
+lintest/config.py                    276     10    96%   266, 287, 298, 309, 311-312, 338, 523, 531-532
+lintest/main.py                      131      3    98%   164, 198-199
+lintest/models.py                     85      0   100%
+lintest/reporting/__init__.py          3      0   100%
+lintest/reporting/html_report.py      36      0   100%
+lintest/reporting/json_output.py      18      0   100%
+lintest/utils/__init__.py              3      0   100%
+lintest/utils/logging_setup.py        29      0   100%
+lintest/utils/shell.py                41      0   100%
+----------------------------------------------------------------
+TOTAL                               1373     52    96%
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_automation_files.py:234: not a git checkout
+414 passed, 1 skipped in 5.41s
+exit code: 0

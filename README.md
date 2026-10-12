@@ -1,5 +1,9 @@
 # LinTest
 
+[![CI](https://github.com/Tarunmadhav/Lintest/actions/workflows/ci.yml/badge.svg)](https://github.com/Tarunmadhav/Lintest/actions/workflows/ci.yml)
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
+![License MIT](https://img.shields.io/badge/license-MIT-green)
+
 **Linux server health monitor with alerting** — a Python 3.10+ CLI tool that checks system metrics, systemd services, network reachability and failed SSH logins, then alerts via **Telegram** (with a console fallback) when thresholds are breached. Designed to run unattended from a **systemd timer** (every 5 minutes) or **cron**.
 
 ---
@@ -15,7 +19,7 @@ LinTest answers four questions about a Linux host and tells you when something i
 | **Network** | ICMP ping latency, TCP port reachability, DNS resolution | `ping`, sockets, `dig` |
 | **Security** | Failed SSH logins in the last N minutes + top offending IPs | `/var/log/auth.log`, fallback `journalctl` |
 
-Each check produces a **severity** — `OK`, `WARNING` (within 10 points of a limit, or degraded-but-working), `CRITICAL` (limit breached), or `ERROR` (the check itself failed). Problems are dispatched as **alerts** through Telegram/console with **cooldown** (no repeat spam) and **recovery** (a "RECOVERED" message when a problem clears).
+Each check produces a **severity** — `OK`, `WARNING` (inside the early-warning band below a limit, or degraded-but-working), `CRITICAL` (limit breached), or `ERROR` (the check itself failed). The band is `min(10 points, 25 % of the limit)`: percentage thresholds keep the familiar 10-point band, while small thresholds such as `load1_per_core: 1.5` get a proportional one instead of classifying every value as a warning. Problems are dispatched as **alerts** through Telegram/console with **cooldown** (no repeat spam) and **recovery** (a "RECOVERED" message when a problem clears).
 
 Sample output of one pass:
 
@@ -40,8 +44,8 @@ Result: CRITICAL (7 ok, 1 warning(s), 1 critical, 0 error(s) in 2.1s) | exit cod
 
 - **System metrics** — CPU/RAM %, per-mount disk usage with per-mount threshold overrides, load average normalized by core count
 - **Service checks** — `systemctl is-active`, split into *critical* (drives exit code 1) and *warning* tiers
-- **Network checks** — ping with automatic TCP-latency fallback when ICMP is unavailable, TCP port probes (`host:port`, IPv6 as `[::1]:443`), DNS via system resolver or explicit `dig @server`
-- **Security check** — failed SSH logins counted over a rolling window with per-IP ranking; tolerant parser (auth.log + journalctl formats, year roll-over safe)
+- **Network checks** — ping with automatic TCP-latency fallback when ICMP is unavailable *or* the probe produces no usable output, TCP port probes (`host:port`, IPv6 as `[::1]:443`), DNS via system resolver or explicit `dig @server` (a missing `dig` degrades to the system resolver instead of a false DNS outage)
+- **Security check** — failed SSH logins counted over a rolling window with per-IP ranking; tolerant parser (auth.log + journalctl formats including `sshd-session`, year roll-over safe, malformed lines skipped, tail-only reads)
 - **Alerting** — Telegram Bot API + console fallback; per-check cooldown persisted to disk across runs; automatic RECOVERED messages
 - **Configuration** — single `config.yaml`, validated on startup with *all* errors reported together
 - **Crash isolation** — every check runs behind a guard; one failing check becomes an ERROR result instead of aborting the run
@@ -128,7 +132,9 @@ key = check::subject          <- identity used for cooldown bookkeeping
 2. **External commands never raise.** `utils/shell.run_command()` returns a `CommandResult` with `missing` / `timed_out` flags; callers turn those into ERROR/CRITICAL results.
 3. **Alert delivery never raises.** Channels return `True`/`False`; if no channel delivers, the cooldown state is *not* armed, so the next run retries the alert.
 4. **Secrets never touch disk or git.** The Telegram token/chat id are read from environment variables (names configured in `config.yaml`); only `.env.example` is committed.
-5. **State survives restarts.** Cooldown bookkeeping is a small JSON file (`/var/lib/lintest/state.json`), so a systemd *timer* (new process every 5 min) still suppresses repeats.
+5. **State survives restarts.** Cooldown bookkeeping is a small JSON file (`/var/lib/lintest/state.json`), so a systemd *timer* (new process every 5 min) still suppresses repeats. Writes are atomic and mode `0600`; a corrupt or half-written state file is dropped entry by entry instead of aborting the pass.
+6. **Bounded resource use.** The SSH log is read from the **tail only** (last 4 MiB), every subprocess runs with a timeout, and a probe that cannot produce usable evidence degrades to a documented fallback instead of a false CRITICAL.
+7. **Secrets never reach logs.** The Telegram token is redacted from every log line, including `requests` exception text.
 
 ### Key modules
 
@@ -146,6 +152,23 @@ key = check::subject          <- identity used for cooldown bookkeeping
 | `lintest/reporting/` | JSON and standalone-HTML output |
 | `lintest/utils/` | Rotating logging setup; safe subprocess wrapper |
 | `lintest/main.py` | CLI, orchestration, exit codes |
+
+### Verification status
+
+| Gate | Result |
+|---|---|
+| Unit tests | **413 passed, 2 skipped** on native Windows, **414 passed, 1 skipped** on Linux (415 collected; skips: `systemd-analyze` unavailable + POSIX-permissions on Windows, "not a git checkout" in the staged Linux copy) |
+| Coverage | **96 %** of `lintest` (was 55 % before the hardening pass) |
+| Lint | `ruff check lintest tests` — clean (`E`, `F`, `W`, `I`) |
+| Python versions | tested on 3.11 locally and 3.14 (Linux); CI matrix covers 3.10–3.13 |
+| Linux behaviour | real pass against a Linux host (WSL Ubuntu, systemd present) incl. `systemctl`, `ping`, log sources |
+| Packaging | `python -m build` + wheel installed into a clean venv, `lintest --version` / real pass OK |
+| systemd units | `systemd-analyze verify` clean |
+| Installer | `install.sh` verified end to end on Linux: install with systemd timer → timer fires real passes (cooldown persists across runs, no overlapping processes, `SuccessExitStatus=1` honoured in the journal) → re-install (config/`.env` preserved, `config.yaml.new` written) → uninstall (config backup kept) → `--purge` |
+| Gate outputs | raw, timestamped output of every gate above — incl. `systemd-analyze`, build, `twine check` and a clean-venv wheel install — saved in [docs/verification/](docs/verification/) with exit codes |
+| Native Windows | verified **outside WSL**: real ICMP ping (`ping -n/-w ms`), real `C:\`/`D:\`/`E:\` disk values, services/security reported as "unsupported/skipped", exit codes 0/1/2, cp1252-safe output — see [docs/verification/windows-native.txt](docs/verification/windows-native.txt) |
+
+See [CHANGELOG.md](CHANGELOG.md) for the full defect list, [SECURITY.md](SECURITY.md) for the threat model, and [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md) for the release gates and known limitations.
 
 ---
 
@@ -181,8 +204,9 @@ The parts you'll most likely touch:
 
 ```yaml
 thresholds:
-  cpu_percent: 85            # >= limit -> CRITICAL; within 10 points -> WARNING
+  cpu_percent: 85            # >= limit -> CRITICAL; within the warning band -> WARNING
   disk_overrides: { "/": 85, "/data/db": 95 }
+  load1_per_core: 1.5        # the band is min(10 points, 25 % of the limit)
   failed_ssh_logins: 20      # within security.window_minutes
 
 services:
@@ -244,13 +268,26 @@ systemctl list-timers lintest.timer     # verify next-fire time
 journalctl -u lintest.service -f        # watch passes live
 ```
 
-`install.sh` creates a `lintest` system user, installs to `/opt/lintest`, sets up a venv, log dir `/var/log/lintest`, state dir `/var/lib/lintest`, a 600-permission `.env`, and enables the 5-minute timer. Alternatives: `sudo ./install.sh --cron`, `--no-schedule`, `--uninstall`.
+`install.sh` creates a `lintest` system user, installs to `/opt/lintest`, sets up a venv, log dir `/var/log/lintest`, state dir `/var/lib/lintest`, a `640 root:lintest` `.env`, adds the service user to `adm`/`systemd-journal` (so the SSH check can read authentication events), runs a real smoke-test pass as that user, and enables the 5-minute timer.
+
+| Invocation | Effect |
+|---|---|
+| `sudo ./install.sh` | install + systemd service/timer (falls back to cron automatically) |
+| `sudo ./install.sh --cron` | install + cron entry |
+| `sudo ./install.sh --no-schedule` | install files, venv and smoke test only |
+| `sudo ./install.sh` (again) | **upgrade**: replaces code, keeps your `config.yaml` and `.env`, writes a differing default config to `config.yaml.new` |
+| `sudo ./install.sh --uninstall` | remove code + scheduler, keep logs, state and a timestamped config backup in `/var/backups/lintest/` |
+| `sudo ./install.sh --uninstall --purge` | also remove logs, state and the `lintest` user |
+
+Security posture of the installed setup: the application tree is `root:root` and not group/world-writable, the unit runs with `ProtectSystem=strict` (write access only to `/var/lib/lintest` and `/var/log/lintest`), `NoNewPrivileges=true` and restricted address families — see [SECURITY.md](SECURITY.md).
 
 **Option B — cron:**
 
 ```bash
-crontab -u lintest cron/lintest.cron
+crontab -u lintest cron/lintest.cron     # the line sources /opt/lintest/.env itself
 ```
+
+Cron does not read systemd's `EnvironmentFile`, so the installed cron job sources `/opt/lintest/.env` before running the check — without it the Telegram channel would silently have no credentials.
 
 **Option C — daemon loop (no scheduler):**
 
@@ -283,9 +320,24 @@ python -m lintest --config config.yaml
 
 ```bash
 pip install -r requirements-dev.txt
-pytest                 # 62 tests: thresholds, config validation, log parser, cooldown/recovery
-pytest --cov=lintest   # with coverage
+ruff check lintest tests        # lint gate (also runs in CI)
+pytest                          # 415 tests
+pytest --cov=lintest            # 96 % coverage
 ```
+
+The suite is hermetic: no test touches the real system, the network or your
+cooldown state (`LINTEST_STATE_FILE` is redirected per test), so it passes on
+Linux, macOS and Windows and on Python 3.10–3.14.
+
+What is covered: threshold classification and the WARNING band, config
+validation (every validator branch, all errors reported together), service/
+network/system checks with faked `systemctl`/`ping`/`psutil` (missing binary,
+timeout, unusable output, TCP fallback), SSH log parsing (year rollover,
+boundary timestamps, `sshd-session`, tail reads, malformed lines, journalctl
+fallback), alert cooldown/recovery and retry semantics, state-file corruption
+and concurrent writes, Telegram HTTP/timeout/redaction paths, CLI exit codes and
+output modes, error isolation between check areas, plus static checks on
+`install.sh`, the systemd units, the cron template and secret hygiene.
 
 ### Simulate failures on a Linux box
 
@@ -318,12 +370,16 @@ The checks degrade gracefully: `systemctl` missing → ERROR results; no `/var/l
 Lintest/
 ├── config.yaml               # commented default configuration
 ├── requirements.txt          # psutil, PyYAML, requests
-├── requirements-dev.txt      # + pytest, pytest-cov
-├── pyproject.toml            # packaging + `lintest` console script
-├── install.sh                # one-shot installer (systemd / cron / uninstall)
-├── systemd/lintest.service   # oneshot service unit
-├── systemd/lintest.timer     # 5-minute timer
-├── cron/lintest.cron         # cron alternative
+├── requirements-dev.txt      # + pytest, pytest-cov, ruff, build
+├── pyproject.toml            # packaging, pytest, coverage and ruff config
+├── install.sh                # idempotent installer (systemd / cron / upgrade / uninstall / purge)
+├── CHANGELOG.md              # keep-a-changelog history + fixed defects
+├── SECURITY.md               # threat model, privileged access, secret handling
+├── docs/RELEASE_CHECKLIST.md # release gates and known limitations
+├── .github/workflows/ci.yml  # tests, coverage, lint, packaging, installer, units
+├── systemd/lintest.service   # oneshot service unit (sandboxed)
+├── systemd/lintest.timer     # 5-minute timer (no overlapping passes)
+├── cron/lintest.cron         # cron alternative (sources .env)
 ├── .env.example              # template for Telegram secrets
 ├── lintest/
 │   ├── main.py               # CLI + orchestration
@@ -333,18 +389,39 @@ Lintest/
 │   ├── alerts/               # base, console, telegram, manager (cooldown)
 │   ├── reporting/            # json_output, html_report
 │   └── utils/                # logging_setup, shell
-└── tests/                    # pytest suite (62 tests)
+└── tests/                    # pytest suite (415 tests, 96 % coverage)
 ```
+
+## Operating notes
+
+- **Cooldown location.** Cooldown/recovery state defaults to
+  `/var/lib/lintest/state.json` (then `/run/lintest`, then `~/.cache/lintest`);
+  override with `LINTEST_STATE_FILE`. State on `/run` is lost on reboot.
+- **Read-only sandbox.** The unit may only write to `/var/lib/lintest` and
+  `/var/log/lintest`. If you point `logging.file` somewhere else, add that path
+  to `ReadWritePaths=` in the unit or logging falls back to the console.
+- **SSH log access.** For failed-login detection the service user needs to read
+  the auth log (`adm` group on Debian/Ubuntu) or the journal
+  (`systemd-journal`). Without either, `security.ssh` reports a WARNING — it
+  never silently reports "0 failures".
+- **ICMP.** If `ping` is unavailable or ICMP is filtered, the host check falls
+  back to a TCP-connect probe to port 443 and says so in the result details
+  (`method: tcp_fallback`); it does not claim packet loss.
+- **Exit codes** are written for schedulers: `0` healthy, `1` CRITICAL found,
+  `2` configuration error, `130` interrupted. The systemd unit declares
+  `SuccessExitStatus=1` so a CRITICAL does not mark the monitor itself failed.
 
 ## Roadmap
 
+- [ ] Event-triggered checks (only re-probe an area when its inputs changed)
 - [ ] Webhook channel (Slack / Discord / generic JSON POST)
 - [ ] Concurrent check execution with per-check deadlines (`asyncio`)
-- [ ] Prometheus `/metrics` endpoint alongside the HTML page
 - [ ] Metric history + trend-based anomaly detection
-- [ ] Auto-remediation hooks (guarded `systemctl restart` for warning-tier services)
 - [ ] Config hot-reload in daemon mode
 - [ ] Debian package + Ansible role
+
+Not planned by design: automatic service restarts (the monitor is an observer),
+a web dashboard, and a Prometheus endpoint.
 
 ## License
 

@@ -11,8 +11,8 @@ import json
 import sys
 from typing import Any, Dict, Optional, TextIO
 
-from lintest.alerts.manager import DispatchSummary
 from lintest.alerts.base import Alert
+from lintest.alerts.manager import DispatchSummary
 from lintest.models import CheckReport
 
 

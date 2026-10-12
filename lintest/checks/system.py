@@ -13,8 +13,8 @@ from typing import List
 
 import psutil
 
-from lintest.config import Config
 from lintest.checks.base import run_check
+from lintest.config import Config, warning_band
 from lintest.models import CheckResult, Severity, critical, ok, warning
 
 logger = logging.getLogger(__name__)
@@ -25,11 +25,17 @@ CPU_SAMPLE_SECONDS = 0.5
 
 
 def _classify(threshold: float, value: float) -> tuple[Severity, str]:
-    """Map *value* against *threshold* to a severity + message suffix."""
+    """Map *value* against *threshold* to a severity + message suffix.
+
+    The WARNING band comes from :func:`lintest.config.warning_band` so small
+    thresholds (``load1_per_core``) get a proportional band instead of the
+    10-point band used for percentages.
+    """
     if value >= threshold:
         return Severity.CRITICAL, f"at or above critical threshold ({threshold:.0f})"
-    if value >= threshold - 10.0:
-        return Severity.WARNING, f"within 10 points of critical threshold ({threshold:.0f})"
+    band = warning_band(threshold)
+    if value >= threshold - band:
+        return Severity.WARNING, f"within {band:g} points of critical threshold ({threshold:.0f})"
     return Severity.OK, ""
 
 

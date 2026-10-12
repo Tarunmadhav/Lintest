@@ -1,0 +1,4 @@
+$ python -m ruff check lintest tests
+date: 2026-10-12T05:21:26Z (WSL Ubuntu, python 3.14.4)
+All checks passed!
+exit code: 0

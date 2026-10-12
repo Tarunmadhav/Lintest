@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from datetime import datetime, timedelta, timezone
 
 from lintest.checks.security import (
@@ -16,7 +17,6 @@ from lintest.checks.security import (
 
 from .conftest import (
     invalid_user_line,
-    journalctl_line,
     make_security_cfg,
     sshd_line,
 )
@@ -54,13 +54,12 @@ class TestParseAuthLine:
 
     def test_year_rollover_pushes_december_back(self, now):
         # A December line read "now" (July) must belong to the previous year.
-        december = datetime(2024, 12, 31, 23, 0, 0)
-        line = f"Dec 31 23:00:00 srv1 sshd[7]: Failed password for root from 9.9.9.9 port 1 ssh2"
+        line = "Dec 31 23:00:00 srv1 sshd[7]: Failed password for root from 9.9.9.9 port 1 ssh2"
         event = parse_auth_line(line, now=now)
         assert event is not None
         assert event.ts.year == now.year - 1
         assert event.ts.month == 12
-        # Sanity: the rollover logic is anchored on 'now', not on the december var.
+        # Sanity: the rollover logic is anchored on 'now', not on a literal year.
         assert event.ts < now
 
 
@@ -111,7 +110,8 @@ class TestWindowAndAggregate:
             sshd_line(now - timedelta(minutes=4), ip="1.1.1.1"),
             invalid_user_line(now - timedelta(minutes=5), ip="2.2.2.2"),
         ]
-        total, top, counts = aggregate([e for e in map(lambda l: parse_auth_line(l, now=now), lines) if e], 2)
+        events = [e for e in (parse_auth_line(line, now=now) for line in lines) if e]
+        total, top, counts = aggregate(events, 2)
         assert total == 4
         assert top[0] == "1.1.1.1"
         assert counts == {"1.1.1.1": 3, "2.2.2.2": 1}
@@ -167,8 +167,19 @@ class TestRunSecurityCheck:
         results = run_security_check(cfg, now=now)
         assert results[0].severity.value == "OK"
 
-    def test_no_source_warning(self, tmp_path, now):
+    def test_no_source_warning(self, tmp_path, now, monkeypatch):
+        # Linux behaviour, pinned explicitly (Windows reports 'skipped' -- see
+        # test_no_source_is_skipped_on_windows).
+        monkeypatch.setattr(sys, "platform", "linux")
         cfg = make_security_cfg(tmp_path / "does-not-exist.log")
         results = run_security_check(cfg, now=now)
         assert results[0].severity.value == "WARNING"
         assert "no SSH auth source" in results[0].message
+
+    def test_no_source_is_skipped_on_windows(self, tmp_path, now, monkeypatch):
+        monkeypatch.setattr(sys, "platform", "win32")
+        cfg = make_security_cfg(tmp_path / "does-not-exist.log")
+        results = run_security_check(cfg, now=now)
+        assert results[0].severity.value == "INFO"
+        assert "skipped on Windows" in results[0].message
+        assert results[0].is_problem() is False
